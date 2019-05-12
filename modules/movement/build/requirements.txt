@@ -1,0 +1,11 @@
+azure-iothub-device-client~=1.4.3
+picamera
+requests
+RPi.GPIO
+imutils
+azure.storage.blob
+pytz
+pyodbc
+omxplayer-wrapper
+pillow
+pyfcm

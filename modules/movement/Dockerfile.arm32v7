@@ -1,0 +1,117 @@
+FROM resin/raspberrypi3-debian:stretch
+
+WORKDIR /app
+
+# Install dependencies and clean-up apt sources.
+RUN apt-get update && apt-get install -y \
+    alsa-utils \
+    avahi-utils \
+    build-essential \
+    cmake \
+    dbus \
+    freetds-bin \
+    freetds-dev \
+    gcc \
+    gfortran \
+    gpac \
+    libatlas-base-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libavresample-dev \
+    libboost-all-dev \
+    libcanberra-gtk* \
+    libdbus-glib-1-dev \
+    libdbus-1-dev \
+    libffi-dev \
+    libgtk2.0-dev \
+    libgtk-3-dev \
+    libjasper-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libraspberrypi-dev \
+    libraspberrypi-bin \
+    libssl-dev \
+    libswscale-dev \
+    libtiff5-dev \
+    libv4l-dev \
+    libxvidcore-dev \
+    libx264-dev \
+    omxplayer \
+    pkg-config \
+    python \
+    python2.7-dev \
+    python3-dev \
+    python-dbus \
+    python3-dbus \
+    python3-pip \
+    python-pymssql \
+    python-pyodbc \
+    python-sqlalchemy \
+    tdsodbc \
+    unixodbc-dev \
+    unixodbc-bin \
+    unzip \
+    wget \
+  && apt install unixodbc-bin -y  \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --upgrade pip 
+RUN pip install --upgrade setuptools 
+COPY /build/requirements.txt ./
+RUN pip install -r requirements.txt
+
+# Install pip and numpy for both Python 3.
+RUN wget https://bootstrap.pypa.io/get-pip.py
+RUN python3 get-pip.py \
+    && pip3 install numpy
+
+# Allow overriding the OpenCV version to build
+RUN  OPENCV_VERSION=3.4.2 \
+  && WS_DIR=`pwd` \
+  && mkdir opencv \
+  && cd opencv \
+  # download OpenCV and opencv_contrib
+  && wget -O opencv.zip https://github.com/opencv/opencv/archive/$OPENCV_VERSION.zip \
+  && unzip opencv.zip \
+  && sudo rm -rf opencv.zip \
+  && wget -O opencv_contrib.zip https://github.com/opencv/opencv_contrib/archive/$OPENCV_VERSION.zip \
+  && unzip opencv_contrib.zip \
+  && sudo rm -rf opencv_contrib.zip \
+  && OPENCV_SRC_DIR=`pwd`/opencv-$OPENCV_VERSION \
+  && OPENCV_CONTRIB_MODULES_SRC_DIR=`pwd`/opencv_contrib-$OPENCV_VERSION/modules \
+  # build and install without gpu dependency
+  && cd $OPENCV_SRC_DIR \
+  && mkdir build && cd build \
+  && cmake -D CMAKE_BUILD_TYPE=RELEASE \
+    -D CMAKE_INSTALL_PREFIX=/usr/local \
+    -D OPENCV_EXTRA_MODULES_PATH=$OPENCV_CONTRIB_MODULES_SRC_DIR \
+    -D ENABLE_NEON=ON \
+    -D ENABLE_VFPV3=ON \
+    -D BUILD_TESTS=OFF \
+    -D INSTALL_PYTHON_EXAMPLES=OFF \
+    -D BUILD_EXAMPLES=OFF \
+    .. \
+  && make -j4 \
+  && sudo make install \
+  # cleanup
+  && cd $WS_DIR \
+  && sudo rm -rf opencv
+
+RUN pip install asyncio tornado
+
+RUN sudo echo "America/Los_Angeles" > /etc/timezone
+RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime
+RUN sudo dpkg-reconfigure -f noninteractive tzdata
+
+ADD /conf/haarcascade_frontalface_default.xml /app/haarcascade_frontalface_default.xml
+ADD /conf/odbcinst.ini /etc/odbcinst.ini
+ADD /conf/freetds.conf /etc/freetds/freetds.conf
+ADD /conf/odbc.ini /etc/odbc.ini
+ADD /app/ .
+
+ENV NO_AT_BRIDGE 1
+
+# Expose the port
+EXPOSE 5012
+
+ENTRYPOINT [ "python3", "-u", "./main.py" ]
